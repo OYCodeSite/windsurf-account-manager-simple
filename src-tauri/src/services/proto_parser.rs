@@ -1214,6 +1214,22 @@ impl ProtobufParser {
             if let Some(v) = plan_status.get("int_9").and_then(|v| v.as_i64()) {
                 result["available_flow_credits"] = json!(v);
             }
+            // field 14: daily_usage_percent (天额度已用百分比, 0~100)
+            if let Some(v) = plan_status.get("int_14").and_then(|v| v.as_i64()) {
+                result["daily_usage_percent"] = json!(v);
+            }
+            // field 15: weekly_usage_percent (周额度已用百分比, 0~100)
+            if let Some(v) = plan_status.get("int_15").and_then(|v| v.as_i64()) {
+                result["weekly_usage_percent"] = json!(v);
+            }
+            // field 17: daily_reset_at (天额度重置时间, Unix 时间戳秒)
+            if let Some(v) = plan_status.get("int_17").and_then(|v| v.as_i64()) {
+                result["daily_reset_at"] = json!(v);
+            }
+            // field 18: weekly_reset_at (周额度重置时间, Unix 时间戳秒)
+            if let Some(v) = plan_status.get("int_18").and_then(|v| v.as_i64()) {
+                result["weekly_reset_at"] = json!(v);
+            }
             
             // field 10: TopUpStatus (子消息)
             if let Some(top_up) = plan_status.get("subMesssage_10") {

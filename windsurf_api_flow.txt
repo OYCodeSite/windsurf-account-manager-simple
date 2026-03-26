@@ -1,0 +1,267 @@
+================================================================
+Windsurf 账号数据获取完整流程 (Python 实现参考)
+================================================================
+
+----------------------------------------------------------------
+一、认证流程 (Firebase Auth)
+----------------------------------------------------------------
+
+步骤 1: 用账号密码登录 (sign_in)
+  URL: POST https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=AIzaSyDsOl-1XpT5err0Tcnx8FFod1H8gVGIycY
+  请求头:
+    Content-Type: application/json
+    X-Client-Version: Chrome/JsCore/11.0.0/FirebaseCore-web
+  请求体 (JSON):
+    {
+      "returnSecureToken": true,
+      "email": "xxx@xxx.com",
+      "password": "your_password",
+      "clientType": "CLIENT_TYPE_WEB"
+    }
+  返回:
+    idToken      -> 即 access_token / id_token，用于后续 API 请求
+    refreshToken -> 用于 token 续期
+    expiresIn    -> token 有效秒数（通常 3600）
+
+步骤 2: 用 refresh_token 续期 (refresh_token)
+  URL: POST https://securetoken.googleapis.com/v1/token?key=AIzaSyDsOl-1XpT5err0Tcnx8FFod1H8gVGIycY
+  请求头:
+    Content-Type: application/x-www-form-urlencoded
+    Referer: https://windsurf.com/
+    X-Client-Version: Chrome/JsCore/11.0.0/FirebaseCore-web
+  请求体 (form-urlencoded):
+    grant_type=refresh_token&refresh_token=<refresh_token>
+  返回:
+    id_token      -> 新的 access token
+    refresh_token -> 新的 refresh token（需更新存储）
+    expires_in    -> 有效秒数
+
+----------------------------------------------------------------
+二、获取用户数据 (两种 API，二选一)
+----------------------------------------------------------------
+
+【方式 A】轻量级 API: GetPlanStatus (推荐，用于只需积分信息)
+  URL: POST https://windsurf.com/_backend/exa.seat_management_pb.SeatManagementService/GetPlanStatus
+  请求头:
+    accept: */*
+    cache-control: no-cache
+    connect-protocol-version: 1
+    content-type: application/proto
+    x-auth-token: <id_token>
+    Referer: https://windsurf.com/
+  请求体 (二进制 Protobuf，手动构造):
+    字段 1 (auth_token, wire_type=2/LengthDelimited):
+      tag = (1 << 3) | 2 = 0x0a
+      然后是 token 长度的 varint 编码
+      然后是 token 的 UTF-8 字节
+    Python 示例:
+      token_bytes = token.encode('utf-8')
+      body = b'\x0a' + encode_varint(len(token_bytes)) + token_bytes
+
+  返回: 二进制 Protobuf 响应体 (或带 data:application/proto;base64, 前缀的 base64)
+
+【方式 B】完整 API: GetCurrentUser (包含用户全量信息)
+  URL: POST https://windsurf.com/_backend/exa.seat_management_pb.SeatManagementService/GetCurrentUser
+  请求头: 同上
+  请求体:
+    字段 1 (auth_token): 同 GetPlanStatus
+    追加额外字节: 0x10 0x01 0x18 0x01 0x20 0x01
+      (field 2 = varint 1, field 3 = varint 1, field 4 = varint 1)
+    Python 示例:
+      body = b'\x0a' + encode_varint(len(token_bytes)) + token_bytes
+      body += b'\x10\x01\x18\x01\x20\x01'
+
+  返回: 二进制 Protobuf 响应体
+
+----------------------------------------------------------------
+三、Varint 编码 (Python 实现)
+----------------------------------------------------------------
+
+def encode_varint(value):
+    result = b''
+    while value > 0x7F:
+        result += bytes([(value & 0x7F) | 0x80])
+        value >>= 7
+    result += bytes([value])
+    return result
+
+----------------------------------------------------------------
+四、Protobuf 响应体解析
+----------------------------------------------------------------
+
+步骤 1: 判断响应体格式
+  if response.text.startswith("data:application/proto;base64,"):
+      # 去掉前缀（31字节），Base64 解码
+      raw = base64.b64decode(response.text[31:].strip())
+  elif looks_like_base64(response.text):
+      raw = base64.b64decode(response.text.strip())
+  else:
+      raw = response.content  # 直接二进制
+
+步骤 2: 解析 Protobuf 二进制 (通用解析)
+  Protobuf tag 格式: tag = (field_number << 3) | wire_type
+  wire_type:
+    0 = Varint
+    1 = 64-bit fixed
+    2 = LengthDelimited (字符串/子消息/bytes)
+    5 = 32-bit fixed
+
+  Python 解析伪代码:
+    def parse_message(data):
+        result = {}
+        pos = 0
+        while pos < len(data):
+            tag, pos = read_varint(data, pos)
+            field_number = tag >> 3
+            wire_type = tag & 0x07
+            if wire_type == 0:   # Varint
+                value, pos = read_varint(data, pos)
+                result[f"int_{field_number}"] = value
+            elif wire_type == 2: # LengthDelimited
+                length, pos = read_varint(data, pos)
+                raw = data[pos:pos+length]
+                pos += length
+                # 尝试解析为字符串
+                try:
+                    result[f"string_{field_number}"] = raw.decode('utf-8')
+                except:
+                    # 尝试递归解析为子消息
+                    try:
+                        result[f"subMessage_{field_number}"] = parse_message(raw)
+                    except:
+                        result[f"bytes_{field_number}"] = raw.hex()
+            elif wire_type == 5: # Fixed32
+                value = struct.unpack_from('<f', data, pos)[0]
+                pos += 4
+                result[f"float_{field_number}"] = value
+            elif wire_type == 1: # Fixed64
+                value = struct.unpack_from('<d', data, pos)[0]
+                pos += 8
+                result[f"double_{field_number}"] = value
+        return result
+
+----------------------------------------------------------------
+五、GetPlanStatus 响应字段映射
+----------------------------------------------------------------
+
+解析后的通用 JSON -> 有意义字段:
+
+顶层 subMessage_1 = PlanStatus:
+  subMessage_1 = PlanInfo:
+    int_1    -> teams_tier (0=UNSPECIFIED,1=TEAMS,2=PRO,3=ENTERPRISE...)
+    string_2 -> plan_name (套餐名称，如 "Pro")
+    int_12   -> monthly_prompt_credits (每月 prompt 配额)
+    int_13   -> monthly_flow_credits (每月 flow 配额)
+  subMessage_2.int_1 -> plan_start (Unix 时间戳)
+  subMessage_3.int_1 -> plan_end   (Unix 时间戳，订阅到期)
+  int_4  -> available_flex_credits  (剩余 flex 积分)
+  int_5  -> used_flow_credits       (已用 flow 积分)
+  int_6  -> used_prompt_credits     (已用 prompt 积分)
+  int_7  -> used_flex_credits       (已用 flex 积分)
+  int_8  -> available_prompt_credits (剩余 prompt 积分)
+  int_9  -> available_flow_credits  (剩余 flow 积分)
+
+计算 used_quota  = used_prompt_credits + used_flex_credits
+计算 total_quota = available_flex_credits + available_prompt_credits
+
+----------------------------------------------------------------
+六、GetCurrentUser 响应字段映射
+----------------------------------------------------------------
+
+顶层结构:
+  subMessage_1 = User 基本信息:
+    string_1 -> api_key
+    string_2 -> name
+    string_3 -> email
+    string_6 -> firebase_uid
+    string_7 -> team_id
+    int_8    -> team_status
+    int_13   -> pro (1=是Pro)
+    int_16   -> disable_codeium (1=被禁用)
+    int_28   -> used_prompt_credits
+    int_29   -> used_flow_credits
+  string_2  -> roles 字符串 (如 "root.admin")
+  subMessage_4 = Team/Subscription 信息:
+    string_2   -> team_name
+    int_7      -> subscription_active (1=有效)
+    int_10     -> num_seats (座位数)
+    int_15     -> flex_credit_quota (额外配额)
+    int_17     -> used_prompt_credits (团队维度)
+    int_27     -> used_flex_credits
+    subMessage_18.int_1 -> 订阅到期时间 (Unix 时间戳)
+  subMessage_6 = PlanInfo:
+    string_2 -> plan_name
+    int_12   -> monthly_prompt_credits (基础配额)
+    int_13   -> monthly_flow_credits
+  subMessage_7 = UserRole:
+    string_1 -> api_key
+    string_4 -> role_name (如 "Admin")
+
+计算 total_quota = subMessage_6.int_12 + subMessage_4.int_15
+计算 used_quota  = subMessage_4.int_17
+
+----------------------------------------------------------------
+七、完整 Python 调用示例
+----------------------------------------------------------------
+
+import requests
+import base64
+import struct
+
+FIREBASE_API_KEY = "AIzaSyDsOl-1XpT5err0Tcnx8FFod1H8gVGIycY"
+WINDSURF_BASE = "https://windsurf.com/_backend"
+
+def encode_varint(value):
+    result = b''
+    while value > 0x7F:
+        result += bytes([(value & 0x7F) | 0x80])
+        value >>= 7
+    result += bytes([value])
+    return result
+
+# 1. 登录获取 token
+def sign_in(email, password):
+    url = f"https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key={FIREBASE_API_KEY}"
+    resp = requests.post(url, json={
+        "returnSecureToken": True,
+        "email": email,
+        "password": password,
+        "clientType": "CLIENT_TYPE_WEB"
+    }, headers={"X-Client-Version": "Chrome/JsCore/11.0.0/FirebaseCore-web"})
+    data = resp.json()
+    return data["idToken"], data["refreshToken"]
+
+# 2. 刷新 token
+def refresh_token(refresh_tok):
+    url = f"https://securetoken.googleapis.com/v1/token?key={FIREBASE_API_KEY}"
+    resp = requests.post(url,
+        data=f"grant_type=refresh_token&refresh_token={refresh_tok}",
+        headers={
+            "Content-Type": "application/x-www-form-urlencoded",
+            "Referer": "https://windsurf.com/"
+        })
+    data = resp.json()
+    return data["id_token"], data["refresh_token"]
+
+# 3. 构建 proto 请求体
+def build_proto_body(token, extra=False):
+    token_bytes = token.encode('utf-8')
+    body = b'\x0a' + encode_varint(len(token_bytes)) + token_bytes
+    if extra:
+        body += b'\x10\x01\x18\x01\x20\x01'
+    return body
+
+# 4. 调用 GetPlanStatus
+def get_plan_status(token):
+    url = f"{WINDSURF_BASE}/exa.seat_management_pb.SeatManagementService/GetPlanStatus"
+    resp = requests.post(url,
+        data=build_proto_body(token),
+        headers={
+            "content-type": "application/proto",
+            "connect-protocol-version": "1",
+            "x-auth-token": token,
+            "Referer": "https://windsurf.com/"
+        })
+    return resp.content  # 再调用 parse_message() 解析
+
+================================================================

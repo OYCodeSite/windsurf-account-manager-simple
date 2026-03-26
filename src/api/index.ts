@@ -57,6 +57,10 @@ export const apiService = {
     total_quota?: number;
     subscription_expires_at?: string;
     is_disabled?: boolean;
+    daily_usage_percent?: number;
+    weekly_usage_percent?: number;
+    daily_reset_at?: number;
+    weekly_reset_at?: number;
   }> {
     return await invoke('login_account', { id });
   },

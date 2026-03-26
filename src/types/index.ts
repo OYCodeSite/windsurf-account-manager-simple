@@ -100,6 +100,14 @@ export interface Account {
   is_team_owner?: boolean;
   // 自定义排序顺序（用于拖拽排序）
   sortOrder?: number;
+  // 天额度已用百分比 (0~100, 来自 GetPlanStatus int_14)
+  daily_usage_percent?: number;
+  // 周额度已用百分比 (0~100, 来自 GetPlanStatus int_15)
+  weekly_usage_percent?: number;
+  // 天额度重置时间 Unix 时间戳秒 (来自 GetPlanStatus int_17)
+  daily_reset_at?: number;
+  // 周额度重置时间 Unix 时间戳秒 (来自 GetPlanStatus int_18)
+  weekly_reset_at?: number;
 }
 
 // ============================================================

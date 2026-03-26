@@ -12,7 +12,7 @@ const accountsStore = useAccountsStore();
 const settingsStore = useSettingsStore();
 const uiStore = useUIStore();
 
-const showWelcomeDialog = ref(true);
+const showWelcomeDialog = ref(false); // 暂时关闭重要提醒弹窗
 
 // 事件监听取消函数
 let tokenRefreshedUnlisten: UnlistenFn | null = null;
@@ -69,10 +69,10 @@ const disableDebugKeys = (e: KeyboardEvent) => {
 
 onMounted(async () => {
   // 禁用右键菜单
-  document.addEventListener('contextmenu', disableContextMenu);
+  // document.addEventListener('contextmenu', disableContextMenu);
   
   // 禁用调试快捷键
-  document.addEventListener('keydown', disableDebugKeys);
+  // document.addEventListener('keydown', disableDebugKeys);
   
   // 获取并设置应用标题（包含版本号）
   try {

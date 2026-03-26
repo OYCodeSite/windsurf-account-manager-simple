@@ -161,6 +161,10 @@ pub async fn login_account(
                     if let Some(plan_end) = plan_status.get("plan_end").and_then(|v| v.as_i64()) {
                         updated_account.subscription_expires_at = chrono::DateTime::from_timestamp(plan_end, 0);
                     }
+                    updated_account.daily_usage_percent = plan_status.get("daily_usage_percent").and_then(|v| v.as_i64());
+                    updated_account.weekly_usage_percent = plan_status.get("weekly_usage_percent").and_then(|v| v.as_i64());
+                    updated_account.daily_reset_at = plan_status.get("daily_reset_at").and_then(|v| v.as_i64());
+                    updated_account.weekly_reset_at = plan_status.get("weekly_reset_at").and_then(|v| v.as_i64());
                     
                     updated_account.last_quota_update = Some(chrono::Utc::now());
                     store.update_account(updated_account.clone()).await
@@ -216,11 +220,26 @@ pub async fn login_account(
 
                 updated_account.last_quota_update = Some(chrono::Utc::now());
                 store.update_account(updated_account.clone()).await
-                    .map_err(|e| format!("保存账户信息失败: {}", e))?;
+                    .map_err(|e| format!("保存账户信息失败: {}", e))?
             }
         }
     }
     
+    // 非轻量级模式下额外调用 GetPlanStatus 补充天/周额度字段
+    if !settings.use_lightweight_api {
+        if let Ok(plan_result) = windsurf_service.get_plan_status(&token).await {
+            if plan_result.get("success").and_then(|v| v.as_bool()).unwrap_or(false) {
+                if let Some(plan_status) = plan_result.get("plan_status") {
+                    updated_account.daily_usage_percent = plan_status.get("daily_usage_percent").and_then(|v| v.as_i64());
+                    updated_account.weekly_usage_percent = plan_status.get("weekly_usage_percent").and_then(|v| v.as_i64());
+                    updated_account.daily_reset_at = plan_status.get("daily_reset_at").and_then(|v| v.as_i64());
+                    updated_account.weekly_reset_at = plan_status.get("weekly_reset_at").and_then(|v| v.as_i64());
+                    let _ = store.update_account(updated_account.clone()).await;
+                }
+            }
+        }
+    }
+
     // 如果使用轻量级 API 或者之前没有获取到，需要单独获取 is_team_owner
     if updated_account.is_team_owner.is_none() {
         let is_team_owner = check_is_team_owner(&windsurf_service, &token, &updated_account.email).await;
@@ -247,7 +266,11 @@ pub async fn login_account(
         "total_quota": updated_account.total_quota,
         "subscription_expires_at": updated_account.subscription_expires_at.map(|dt| dt.to_rfc3339()),
         "is_disabled": updated_account.is_disabled,
-        "is_team_owner": updated_account.is_team_owner
+        "is_team_owner": updated_account.is_team_owner,
+        "daily_usage_percent": updated_account.daily_usage_percent,
+        "weekly_usage_percent": updated_account.weekly_usage_percent,
+        "daily_reset_at": updated_account.daily_reset_at,
+        "weekly_reset_at": updated_account.weekly_reset_at
     }))
 }
 
@@ -335,6 +358,22 @@ pub async fn refresh_token(
                     if let Some(plan_end) = plan_status.get("plan_end").and_then(|v| v.as_i64()) {
                         updated_account.subscription_expires_at = chrono::DateTime::from_timestamp(plan_end, 0);
                     }
+                    // 新增：天额度已用百分比
+                    if let Some(v) = plan_status.get("daily_usage_percent").and_then(|v| v.as_i64()) {
+                        updated_account.daily_usage_percent = Some(v);
+                    }
+                    // 新增：周额度已用百分比
+                    if let Some(v) = plan_status.get("weekly_usage_percent").and_then(|v| v.as_i64()) {
+                        updated_account.weekly_usage_percent = Some(v);
+                    }
+                    // 新增：天额度重置时间戳
+                    if let Some(v) = plan_status.get("daily_reset_at").and_then(|v| v.as_i64()) {
+                        updated_account.daily_reset_at = Some(v);
+                    }
+                    // 新增：周额度重置时间戳
+                    if let Some(v) = plan_status.get("weekly_reset_at").and_then(|v| v.as_i64()) {
+                        updated_account.weekly_reset_at = Some(v);
+                    }
 
                     updated_account.last_quota_update = Some(chrono::Utc::now());
                     store.update_account(updated_account.clone()).await
@@ -389,7 +428,7 @@ pub async fn refresh_token(
 
                 updated_account.last_quota_update = Some(chrono::Utc::now());
                 store.update_account(updated_account.clone()).await
-                    .map_err(|e| format!("保存账户信息失败: {}", e))?;
+                    .map_err(|e| format!("保存账户信息失败: {}", e))?
             }
         }
     }
@@ -400,6 +439,29 @@ pub async fn refresh_token(
         updated_account.is_team_owner = Some(is_team_owner);
         store.update_account(updated_account.clone()).await
             .map_err(|e| format!("保存账户信息失败: {}", e))?;
+    }
+
+    // 非轻量级模式下额外调用 GetPlanStatus 补充天/周额度字段
+    if !settings.use_lightweight_api {
+        if let Ok(plan_result) = windsurf_service.get_plan_status(&token).await {
+            if plan_result.get("success").and_then(|v| v.as_bool()).unwrap_or(false) {
+                if let Some(plan_status) = plan_result.get("plan_status") {
+                    if let Some(v) = plan_status.get("daily_usage_percent").and_then(|v| v.as_i64()) {
+                        updated_account.daily_usage_percent = Some(v);
+                    }
+                    if let Some(v) = plan_status.get("weekly_usage_percent").and_then(|v| v.as_i64()) {
+                        updated_account.weekly_usage_percent = Some(v);
+                    }
+                    if let Some(v) = plan_status.get("daily_reset_at").and_then(|v| v.as_i64()) {
+                        updated_account.daily_reset_at = Some(v);
+                    }
+                    if let Some(v) = plan_status.get("weekly_reset_at").and_then(|v| v.as_i64()) {
+                        updated_account.weekly_reset_at = Some(v);
+                    }
+                    let _ = store.update_account(updated_account.clone()).await;
+                }
+            }
+        }
     }
 
     // 记录日志
@@ -483,6 +545,22 @@ pub async fn get_plan_status(
             // 更新订阅到期时间 (plan_end)
             if let Some(plan_end) = plan_status.get("plan_end").and_then(|v| v.as_i64()) {
                 updated_account.subscription_expires_at = chrono::DateTime::from_timestamp(plan_end, 0);
+            }
+            // 新增：天额度已用百分比
+            if let Some(v) = plan_status.get("daily_usage_percent").and_then(|v| v.as_i64()) {
+                updated_account.daily_usage_percent = Some(v);
+            }
+            // 新增：周额度已用百分比
+            if let Some(v) = plan_status.get("weekly_usage_percent").and_then(|v| v.as_i64()) {
+                updated_account.weekly_usage_percent = Some(v);
+            }
+            // 新增：天额度重置时间戳
+            if let Some(v) = plan_status.get("daily_reset_at").and_then(|v| v.as_i64()) {
+                updated_account.daily_reset_at = Some(v);
+            }
+            // 新增：周额度重置时间戳
+            if let Some(v) = plan_status.get("weekly_reset_at").and_then(|v| v.as_i64()) {
+                updated_account.weekly_reset_at = Some(v);
             }
             
             updated_account.last_quota_update = Some(chrono::Utc::now());
@@ -1096,7 +1174,7 @@ fn get_current_user_internal<'a>(
         // 使用完整的 GetCurrentUser API
         println!("[get_current_user] Using GetCurrentUser API");
         
-        let result: serde_json::Value = windsurf_service.get_current_user(&token)
+        let mut result: serde_json::Value = windsurf_service.get_current_user(&token)
             .await
             .map_err(|e: AppError| e.to_string())?;
         
@@ -1154,6 +1232,37 @@ fn get_current_user_internal<'a>(
                 .map_err(|e| format!("保存账户信息失败: {}", e))?;
         }
         
+        // 额外调用 GetPlanStatus 补充天/周额度字段
+        let mut daily_usage_percent: Option<i64> = None;
+        let mut weekly_usage_percent: Option<i64> = None;
+        let mut daily_reset_at: Option<i64> = None;
+        let mut weekly_reset_at: Option<i64> = None;
+        
+        if let Ok(plan_result) = windsurf_service.get_plan_status(&token).await {
+            if plan_result.get("success").and_then(|v| v.as_bool()).unwrap_or(false) {
+                if let Some(plan_status) = plan_result.get("plan_status") {
+                    let mut acc = store.get_account(uuid).await.map_err(|e| e.to_string())?;
+                    if let Some(v) = plan_status.get("daily_usage_percent").and_then(|v| v.as_i64()) {
+                        acc.daily_usage_percent = Some(v);
+                        daily_usage_percent = Some(v);
+                    }
+                    if let Some(v) = plan_status.get("weekly_usage_percent").and_then(|v| v.as_i64()) {
+                        acc.weekly_usage_percent = Some(v);
+                        weekly_usage_percent = Some(v);
+                    }
+                    if let Some(v) = plan_status.get("daily_reset_at").and_then(|v| v.as_i64()) {
+                        acc.daily_reset_at = Some(v);
+                        daily_reset_at = Some(v);
+                    }
+                    if let Some(v) = plan_status.get("weekly_reset_at").and_then(|v| v.as_i64()) {
+                        acc.weekly_reset_at = Some(v);
+                        weekly_reset_at = Some(v);
+                    }
+                    let _ = store.update_account(acc).await;
+                }
+            }
+        }
+        
         // 记录日志
         let success = result.get("user_info").is_some();
         let log = OperationLog::new(
@@ -1164,6 +1273,14 @@ fn get_current_user_internal<'a>(
         .with_account(uuid, account.email);
         
         let _ = store.add_log(log).await;
+        
+        // 将新字段附加到返回值中供前端使用
+        if let Some(obj) = result.as_object_mut() {
+            obj.insert("daily_usage_percent".to_string(), json!(daily_usage_percent));
+            obj.insert("weekly_usage_percent".to_string(), json!(weekly_usage_percent));
+            obj.insert("daily_reset_at".to_string(), json!(daily_reset_at));
+            obj.insert("weekly_reset_at".to_string(), json!(weekly_reset_at));
+        }
         
         Ok(result)
     }
@@ -1523,6 +1640,28 @@ async fn refresh_token_internal(
             }
         }
     }
+
+    // 补充 GetPlanStatus 获取天/周额度字段（轻量级模式已包含，非轻量级模式额外调用）
+    if !use_lightweight_api {
+        if let Ok(plan_result) = windsurf_service.get_plan_status(&token).await {
+            if plan_result.get("success").and_then(|v| v.as_bool()).unwrap_or(false) {
+                if let Some(plan_status) = plan_result.get("plan_status") {
+                    if let Some(v) = plan_status.get("daily_usage_percent").and_then(|v| v.as_i64()) {
+                        updated_account.daily_usage_percent = Some(v);
+                    }
+                    if let Some(v) = plan_status.get("weekly_usage_percent").and_then(|v| v.as_i64()) {
+                        updated_account.weekly_usage_percent = Some(v);
+                    }
+                    if let Some(v) = plan_status.get("daily_reset_at").and_then(|v| v.as_i64()) {
+                        updated_account.daily_reset_at = Some(v);
+                    }
+                    if let Some(v) = plan_status.get("weekly_reset_at").and_then(|v| v.as_i64()) {
+                        updated_account.weekly_reset_at = Some(v);
+                    }
+                }
+            }
+        }
+    }
     
     // 更新账号信息（不立即保存）
     store.update_account_no_save(updated_account.clone()).await
@@ -1540,7 +1679,11 @@ async fn refresh_token_internal(
         "is_team_owner": updated_account.is_team_owner,
         "subscription_expires_at": updated_account.subscription_expires_at.map(|t| t.to_rfc3339()),
         "subscription_active": updated_account.subscription_active,
-        "last_quota_update": updated_account.last_quota_update.map(|t| t.to_rfc3339())
+        "last_quota_update": updated_account.last_quota_update.map(|t| t.to_rfc3339()),
+        "daily_usage_percent": updated_account.daily_usage_percent,
+        "weekly_usage_percent": updated_account.weekly_usage_percent,
+        "daily_reset_at": updated_account.daily_reset_at,
+        "weekly_reset_at": updated_account.weekly_reset_at
     }))
 }
 

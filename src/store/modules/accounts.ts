@@ -556,6 +556,10 @@ export const useAccountsStore = defineStore('accounts', () => {
             if (item.data.subscription_active !== undefined) updatedAcc.subscription_active = item.data.subscription_active;
             if (item.data.subscription_expires_at) updatedAcc.subscription_expires_at = dayjs.unix(item.data.subscription_expires_at).toISOString();
             if (item.data.last_quota_update) updatedAcc.last_quota_update = item.data.last_quota_update;
+            if (item.data.daily_usage_percent !== undefined) updatedAcc.daily_usage_percent = item.data.daily_usage_percent;
+            if (item.data.weekly_usage_percent !== undefined) updatedAcc.weekly_usage_percent = item.data.weekly_usage_percent;
+            if (item.data.daily_reset_at !== undefined) updatedAcc.daily_reset_at = item.data.daily_reset_at;
+            if (item.data.weekly_reset_at !== undefined) updatedAcc.weekly_reset_at = item.data.weekly_reset_at;
             updatedAcc.status = 'active';
             accounts.value.splice(idx, 1, updatedAcc);
             

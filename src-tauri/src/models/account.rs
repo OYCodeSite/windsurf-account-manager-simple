@@ -47,6 +47,18 @@ pub struct Account {
     // 自定义排序顺序（用于拖拽排序）
     #[serde(default, rename = "sortOrder")]
     pub sort_order: i32,
+    // 天额度已用百分比 (0~100, 来自 GetPlanStatus int_14)
+    #[serde(default, alias = "used_prompt_percent")]
+    pub daily_usage_percent: Option<i64>,
+    // 周额度已用百分比 (0~100, 来自 GetPlanStatus int_15)
+    #[serde(default, alias = "used_flow_percent")]
+    pub weekly_usage_percent: Option<i64>,
+    // 天额度重置时间 Unix 时间戳秒 (来自 GetPlanStatus int_17)
+    #[serde(default, alias = "daily_reset_timestamp")]
+    pub daily_reset_at: Option<i64>,
+    // 周额度重置时间 Unix 时间戳秒 (来自 GetPlanStatus int_18)
+    #[serde(default, alias = "weekly_reset_timestamp")]
+    pub weekly_reset_at: Option<i64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -84,6 +96,10 @@ impl Account {
             is_disabled: None,
             is_team_owner: None,
             sort_order: 0,
+            daily_usage_percent: None,
+            weekly_usage_percent: None,
+            daily_reset_at: None,
+            weekly_reset_at: None,
         }
     }
 

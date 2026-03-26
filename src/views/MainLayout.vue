@@ -892,6 +892,10 @@ async function refreshAccounts() {
               account.subscription_expires_at = dayjs.unix(item.data.subscription_expires_at).toISOString();
             }
             if (item.data.last_quota_update) account.last_quota_update = item.data.last_quota_update;
+            if (item.data.daily_usage_percent !== undefined) account.daily_usage_percent = item.data.daily_usage_percent;
+            if (item.data.weekly_usage_percent !== undefined) account.weekly_usage_percent = item.data.weekly_usage_percent;
+            if (item.data.daily_reset_at !== undefined) account.daily_reset_at = item.data.daily_reset_at;
+            if (item.data.weekly_reset_at !== undefined) account.weekly_reset_at = item.data.weekly_reset_at;
             account.status = 'active';
           } else {
             accountsStore.accounts[idx].status = 'error';
@@ -1338,6 +1342,10 @@ async function handleBatchRefresh() {
             if (item.data.used_quota !== undefined) latestAccount.used_quota = item.data.used_quota;
             if (item.data.total_quota !== undefined) latestAccount.total_quota = item.data.total_quota;
             if (item.data.expires_at) latestAccount.token_expires_at = item.data.expires_at;
+            if (item.data.daily_usage_percent !== undefined) latestAccount.daily_usage_percent = item.data.daily_usage_percent;
+            if (item.data.weekly_usage_percent !== undefined) latestAccount.weekly_usage_percent = item.data.weekly_usage_percent;
+            if (item.data.daily_reset_at !== undefined) latestAccount.daily_reset_at = item.data.daily_reset_at;
+            if (item.data.weekly_reset_at !== undefined) latestAccount.weekly_reset_at = item.data.weekly_reset_at;
             latestAccount.status = 'active';
             latestAccount.last_quota_update = dayjs().toISOString();
             accountsStore.updateAccount(latestAccount);

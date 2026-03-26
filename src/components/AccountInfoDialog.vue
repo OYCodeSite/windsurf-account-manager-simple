@@ -167,30 +167,55 @@
                   </tbody>
                 </table>
                 
-                <!-- 使用量/配额美化展示 -->
+                <!-- 天/周额度展示 -->
                 <div class="quota-display-card">
                   <div class="quota-header">
-                    <span class="quota-title">使用量 / 配额</span>
-                    <span class="quota-percentage" :class="getQuotaClass(quotaPercentage)">{{ quotaPercentage }}%</span>
+                    <span class="quota-title">额度使用情况</span>
                   </div>
-                  <div class="quota-progress-wrap">
-                    <div class="quota-progress-bar">
-                      <div 
-                        class="quota-progress-fill" 
-                        :style="{ width: quotaPercentage + '%' }"
-                        :class="getQuotaClass(quotaPercentage)"
-                      ></div>
+
+                  <!-- Daily Remaining -->
+                  <div class="quota-bar-item">
+                    <div class="quota-bar-item-header">
+                      <span class="quota-bar-item-label">Daily Remaining</span>
+                      <span class="quota-bar-item-percent" v-if="currentAccount?.daily_usage_percent != null">{{ currentAccount.daily_usage_percent }}%</span>
+                      <span class="quota-bar-item-percent quota-empty" v-else>—</span>
+                    </div>
+                    <div class="quota-progress-wrap">
+                      <div class="quota-progress-bar" v-if="currentAccount?.daily_usage_percent != null">
+                        <div 
+                          class="quota-progress-fill"
+                          :style="{ width: currentAccount.daily_usage_percent + '%' }"
+                          :class="getRemainClass(currentAccount.daily_usage_percent)"
+                        ></div>
+                      </div>
+                      <div class="quota-progress-bar quota-bar-empty" v-else></div>
+                    </div>
+                    <div class="quota-reset-time" v-if="currentAccount?.daily_reset_at">
+                      <el-icon><Clock /></el-icon>
+                      <span>{{ formatResetCountdown(currentAccount.daily_reset_at) }}</span>
                     </div>
                   </div>
-                  <div class="quota-details">
-                    <div class="quota-used">
-                      <span class="quota-label">已使用</span>
-                      <span class="quota-value">{{ formatCredits(totalUsedCredits) }}</span>
+
+                  <!-- Weekly Remaining -->
+                  <div class="quota-bar-item">
+                    <div class="quota-bar-item-header">
+                      <span class="quota-bar-item-label">Weekly Remaining</span>
+                      <span class="quota-bar-item-percent" v-if="currentAccount?.weekly_usage_percent != null">{{ currentAccount.weekly_usage_percent }}%</span>
+                      <span class="quota-bar-item-percent quota-empty" v-else>—</span>
                     </div>
-                    <div class="quota-divider">/</div>
-                    <div class="quota-total">
-                      <span class="quota-label">总配额</span>
-                      <span class="quota-value">{{ formatCredits(totalQuotaCredits) }}</span>
+                    <div class="quota-progress-wrap">
+                      <div class="quota-progress-bar" v-if="currentAccount?.weekly_usage_percent != null">
+                        <div 
+                          class="quota-progress-fill"
+                          :style="{ width: currentAccount.weekly_usage_percent + '%' }"
+                          :class="getRemainClass(currentAccount.weekly_usage_percent)"
+                        ></div>
+                      </div>
+                      <div class="quota-progress-bar quota-bar-empty" v-else></div>
+                    </div>
+                    <div class="quota-reset-time" v-if="currentAccount?.weekly_reset_at">
+                      <el-icon><Clock /></el-icon>
+                      <span>{{ formatResetCountdown(currentAccount.weekly_reset_at) }}</span>
                     </div>
                   </div>
                 </div>
@@ -722,13 +747,18 @@ import {
   Avatar, Location, View, Message, Right, Star, Hide,
   DataAnalysis, Lock, Calendar
 } from '@element-plus/icons-vue';
-import { useUIStore, useSettingsStore } from '@/store';
+import { useUIStore, useSettingsStore, useAccountsStore } from '@/store';
 import { apiService } from '@/api';
 import { maskEmail } from '@/utils/privacy';
 import dayjs from 'dayjs';
 
 const uiStore = useUIStore();
 const settingsStore = useSettingsStore();
+const accountsStore = useAccountsStore();
+
+const currentAccount = computed(() => 
+  accountsStore.accounts.find(a => a.id === uiStore.currentViewingAccountId)
+);
 
 // 邮箱脱敏处理
 function displayEmail(email: string | undefined | null): string {
@@ -855,6 +885,28 @@ function formatTimestamp(timestamp: number | undefined | null) {
   return dayjs(timestamp * 1000).format('YYYY-MM-DD HH:mm');
 }
 
+// 剩余额度颜色 class
+function getRemainClass(remainPercent: number): string {
+  if (remainPercent > 50) return 'fill-green';
+  if (remainPercent > 20) return 'fill-orange';
+  return 'fill-red';
+}
+
+// 格式化重置倒计时
+function formatResetCountdown(timestamp: number | undefined | null): string {
+  if (!timestamp) return '';
+  const now = dayjs();
+  const reset = dayjs.unix(timestamp);
+  const diff = reset.diff(now, 'second');
+  if (diff <= 0) return '即将重置';
+  const days = Math.floor(diff / 86400);
+  const hours = Math.floor((diff % 86400) / 3600);
+  const minutes = Math.floor((diff % 3600) / 60);
+  if (days > 0) return `${days}天${hours}小时后重置`;
+  if (hours > 0) return `${hours}小时${minutes}分钟后重置`;
+  return `${minutes}分钟后重置`;
+}
+
 // 获取到期倒计时文字
 function getExpireCountdown(timestamp: number | undefined | null): string {
   if (!timestamp) return '';
@@ -901,16 +953,6 @@ function getExpireClass(timestamp: number | undefined | null): string {
   }
 }
 
-// 获取配额使用状态样式类
-function getQuotaClass(percentage: number): string {
-  if (percentage >= 90) {
-    return 'critical';
-  } else if (percentage >= 70) {
-    return 'warning';
-  } else {
-    return 'normal';
-  }
-}
 
 // 格式化大数字（转换为K/M/B格式）
 function formatLargeNumber(num: number | undefined | null) {
@@ -1076,27 +1118,6 @@ const firebaseUid = computed(() => {
   return info?.localId || info?.local_id || info?.uid || '-';
 });
 
-// 总已用积分 (使用subscription中的used_quota或team中的used_prompt_credits)
-const totalUsedCredits = computed(() => {
-  // 优先使用subscription中的used_quota
-  if (userDetails.value?.subscription?.used_quota) {
-    return userDetails.value.subscription.used_quota;
-  }
-  // 否则使用team中的used_prompt_credits
-  return userDetails.value?.team?.used_prompt_credits ?? userDetails.value?.user?.used_prompt_credits ?? 0;
-});
-
-// 总配额积分 (基础配额 + flex配额)
-const totalQuotaCredits = computed(() => {
-  // 优先使用subscription中的quota（已经是计算后的总配额）
-  if (userDetails.value?.subscription?.quota) {
-    return userDetails.value.subscription.quota;
-  }
-  // 否则手动计算：plan中的月度积分 + team中的flex配额
-  const monthlyPrompt = userDetails.value?.plan?.monthly_prompt_credits || 0;
-  const flexQuota = userDetails.value?.team?.flex_credit_quota || 0;
-  return monthlyPrompt + flexQuota;
-});
 
 // 获取座位数
 const seatCount = computed(() => {
@@ -1128,11 +1149,6 @@ const isSubscriptionActive = computed(() => {
   return userDetails.value?.team?.subscription_active || false;
 });
 
-// 配额使用百分比
-const quotaPercentage = computed(() => {
-  if (totalQuotaCredits.value === 0) return 0;
-  return Math.min(100, Math.round((totalUsedCredits.value / totalQuotaCredits.value) * 100));
-});
 
 // 格式化团队层级 (对应 codeium_common_pb.TeamsTier 枚举)
 function formatTeamsTier(tier: number | undefined | null) {
@@ -2730,5 +2746,104 @@ function getPermissionCount(permissions: any): number {
     .label-cell { color: #a3a6ad; }
     .value-cell { color: #cfd3dc; }
   }
+
+  .quota-display-card {
+    background: #2b2b2b;
+    border-color: #4c4d4f;
+    .quota-title { color: #a3a6ad; }
+    .quota-bar-item-label { color: #a3a6ad; }
+    .quota-bar-item-percent { color: #cfd3dc; }
+    .quota-progress-bar { background: #3a3a3a; }
+    .quota-reset-time { color: #6b6b6b; }
+  }
+}
+
+/* 天/周额度展示卡片 */
+.quota-display-card {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 10px 12px;
+  margin-top: 10px;
+
+  .quota-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+  }
+
+  .quota-title {
+    font-size: 12px;
+    font-weight: 600;
+    color: #475569;
+  }
+}
+
+.quota-bar-item {
+  margin-bottom: 8px;
+
+  &:last-child { margin-bottom: 0; }
+}
+
+.quota-bar-item-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 4px;
+}
+
+.quota-bar-item-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: #475569;
+}
+
+.quota-bar-item-percent {
+  font-size: 11px;
+  font-weight: 700;
+  color: #334155;
+}
+
+.quota-empty {
+  color: #94a3b8 !important;
+  font-weight: 500 !important;
+}
+
+.quota-progress-wrap {
+  width: 100%;
+}
+
+.quota-progress-bar {
+  width: 100%;
+  height: 7px;
+  background: #e2e8f0;
+  border-radius: 10px;
+  overflow: hidden;
+
+  &.quota-bar-empty {
+    background: #e2e8f0;
+  }
+}
+
+.quota-progress-fill {
+  height: 100%;
+  border-radius: 10px;
+  transition: width 0.4s ease;
+
+  &.fill-green  { background: linear-gradient(90deg, #10b981, #34d399); }
+  &.fill-orange { background: linear-gradient(90deg, #f59e0b, #fbbf24); }
+  &.fill-red    { background: linear-gradient(90deg, #ef4444, #f87171); }
+}
+
+.quota-reset-time {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  margin-top: 3px;
+  font-size: 10px;
+  color: #94a3b8;
+
+  .el-icon { font-size: 10px; }
 }
 </style>

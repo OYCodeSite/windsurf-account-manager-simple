@@ -1,0 +1,126 @@
+================================================================
+天额度 / 周额度 字段说明
+================================================================
+
+数据来源: GetPlanStatus API
+接口: POST https://windsurf.com/_backend/exa.seat_management_pb.SeatManagementService/GetPlanStatus
+响应结构路径: 顶层 subMessage_1
+
+----------------------------------------------------------------
+一、天额度（Prompt 额度，按天重置）
+----------------------------------------------------------------
+
+已用百分比:
+  字段: subMessage_1.int_14
+  类型: int (0~100)
+  示例: 69  -> 即网页显示 "69%"
+  用法: used_prompt_percent = plan_status.get("int_14", 0)
+
+剩余绝对积分:
+  字段: subMessage_1.int_6
+  类型: int
+  示例: 10000
+  用法: remaining_prompt_credits = plan_status.get("int_6", 0)
+
+月总配额:
+  字段: subMessage_1.subMessage_1.int_12
+  类型: int
+  示例: 10000
+  用法: monthly_prompt_credits = plan_info.get("int_12", 0)
+
+重置时间:
+  字段: subMessage_1.int_17
+  类型: int (Unix 时间戳，秒)
+  示例: 1774252800  ->  2026-03-23 16:00 UTC+8
+  用法:
+    daily_reset_ts = plan_status.get("int_17", 0)
+    tz8 = timezone(timedelta(hours=8))
+    daily_reset_time = datetime.fromtimestamp(daily_reset_ts, tz8).strftime("%Y-%m-%d %H:%M UTC+8")
+
+----------------------------------------------------------------
+二、周额度（Flow 额度，按周重置）
+----------------------------------------------------------------
+
+已用百分比:
+  字段: subMessage_1.int_15
+  类型: int (0~100)
+  示例: 84  -> 即网页显示 "84%"
+  用法: used_flow_percent = plan_status.get("int_15", 0)
+
+剩余绝对积分:
+  字段: subMessage_1.int_9
+  类型: int
+  示例: 20000
+  用法: remaining_flow_credits = plan_status.get("int_9", 0)
+
+月总配额:
+  字段: subMessage_1.subMessage_1.int_13
+  类型: int
+  示例: 20000
+  用法: monthly_flow_credits = plan_info.get("int_13", 0)
+
+重置时间:
+  字段: subMessage_1.int_18
+  类型: int (Unix 时间戳，秒)
+  示例: 1774771200  ->  2026-03-29 16:00 UTC+8
+  用法:
+    weekly_reset_ts = plan_status.get("int_18", 0)
+    tz8 = timezone(timedelta(hours=8))
+    weekly_reset_time = datetime.fromtimestamp(weekly_reset_ts, tz8).strftime("%Y-%m-%d %H:%M UTC+8")
+
+----------------------------------------------------------------
+三、完整提取代码片段
+----------------------------------------------------------------
+
+def extract_plan_status(parsed: dict) -> dict:
+    plan_status = parsed.get("subMessage_1", {})
+    plan_info   = plan_status.get("subMessage_1", {})
+
+    # 天额度
+    remaining_prompt_credits = plan_status.get("int_6", 0)
+    used_prompt_percent      = plan_status.get("int_14", 0)
+    daily_reset_ts           = plan_status.get("int_17", 0)
+
+    # 周额度
+    remaining_flow_credits   = plan_status.get("int_9", 0)
+    used_flow_percent        = plan_status.get("int_15", 0)
+    weekly_reset_ts          = plan_status.get("int_18", 0)
+
+    # 总配额
+    monthly_prompt_credits   = plan_info.get("int_12", 0)
+    monthly_flow_credits     = plan_info.get("int_13", 0)
+
+    # 时间格式化
+    from datetime import timezone, timedelta
+    tz8 = timezone(timedelta(hours=8))
+    def fmt(ts):
+        return datetime.fromtimestamp(ts, tz8).strftime("%Y-%m-%d %H:%M UTC+8") if ts else ""
+
+    return {
+        "used_prompt_percent"     : used_prompt_percent,       # 天额度已用 %
+        "remaining_prompt_credits": remaining_prompt_credits,  # 天剩余积分
+        "monthly_prompt_credits"  : monthly_prompt_credits,    # 月总 prompt
+        "daily_reset_time"        : fmt(daily_reset_ts),       # 天重置时间
+
+        "used_flow_percent"       : used_flow_percent,         # 周额度已用 %
+        "remaining_flow_credits"  : remaining_flow_credits,    # 周剩余积分
+        "monthly_flow_credits"    : monthly_flow_credits,      # 月总 flow
+        "weekly_reset_time"       : fmt(weekly_reset_ts),      # 周重置时间
+    }
+
+----------------------------------------------------------------
+四、字段汇总对照表
+----------------------------------------------------------------
+
+网页显示            | 字段路径                          | 示例值
+--------------------|-----------------------------------|------------------
+天额度 69%          | subMessage_1.int_14               | 69
+天剩余积分          | subMessage_1.int_6                | 10000
+天重置时间          | subMessage_1.int_17 (时间戳)      | 2026-03-23 16:00
+月 Prompt 总配额    | subMessage_1.subMessage_1.int_12  | 10000
+周额度 84%          | subMessage_1.int_15               | 84
+周剩余积分          | subMessage_1.int_9                | 20000
+周重置时间          | subMessage_1.int_18 (时间戳)      | 2026-03-29 16:00
+月 Flow 总配额      | subMessage_1.subMessage_1.int_13  | 20000
+
+================================================================
