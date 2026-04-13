@@ -53,7 +53,7 @@
         <!-- Daily Used -->
         <div class="quota-bar-row">
           <div class="quota-bar-header">
-            <span class="quota-bar-label">Daily Remaining</span>
+            <span class="quota-bar-label">今日剩余</span>
             <span class="quota-bar-percent" v-if="account.daily_usage_percent != null">{{ account.daily_usage_percent }}%</span>
             <span class="quota-bar-percent quota-bar-empty" v-else>—</span>
           </div>
@@ -74,7 +74,7 @@
         <!-- Weekly Used -->
         <div class="quota-bar-row">
           <div class="quota-bar-header">
-            <span class="quota-bar-label">Weekly Remaining</span>
+            <span class="quota-bar-label">本周剩余</span>
             <span class="quota-bar-percent" v-if="account.weekly_usage_percent != null">{{ account.weekly_usage_percent }}%</span>
             <span class="quota-bar-percent quota-bar-empty" v-else>—</span>
           </div>

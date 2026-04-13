@@ -12,6 +12,10 @@ dist
 dist-ssr
 *.local
 
+# Local notes
+quota_fields_note.txt
+windsurf_api_flow.txt
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

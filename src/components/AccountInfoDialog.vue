@@ -173,10 +173,10 @@
                     <span class="quota-title">额度使用情况</span>
                   </div>
 
-                  <!-- Daily Remaining -->
+                  <!-- 今日剩余 -->
                   <div class="quota-bar-item">
                     <div class="quota-bar-item-header">
-                      <span class="quota-bar-item-label">Daily Remaining</span>
+                      <span class="quota-bar-item-label">今日剩余</span>
                       <span class="quota-bar-item-percent" v-if="currentAccount?.daily_usage_percent != null">{{ currentAccount.daily_usage_percent }}%</span>
                       <span class="quota-bar-item-percent quota-empty" v-else>—</span>
                     </div>
@@ -196,10 +196,10 @@
                     </div>
                   </div>
 
-                  <!-- Weekly Remaining -->
+                  <!-- 本周剩余 -->
                   <div class="quota-bar-item">
                     <div class="quota-bar-item-header">
-                      <span class="quota-bar-item-label">Weekly Remaining</span>
+                      <span class="quota-bar-item-label">本周剩余</span>
                       <span class="quota-bar-item-percent" v-if="currentAccount?.weekly_usage_percent != null">{{ currentAccount.weekly_usage_percent }}%</span>
                       <span class="quota-bar-item-percent quota-empty" v-else>—</span>
                     </div>
