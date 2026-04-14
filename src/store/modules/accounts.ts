@@ -39,7 +39,8 @@ export const useAccountsStore = defineStore('accounts', () => {
     if (!account.subscription_expires_at) return null;
     const now = dayjs();
     const expiry = dayjs(account.subscription_expires_at);
-    return expiry.diff(now, 'day');
+    if (expiry.isBefore(now)) return -1;
+    return expiry.startOf('day').diff(now.startOf('day'), 'day');
   }
 
   // 辅助函数：判断是否为付费计划
